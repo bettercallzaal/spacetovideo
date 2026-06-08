@@ -1,0 +1,11 @@
+node_modules/
+.env
+.DS_Store
+
+# Heavy artifacts — never commit
+data/
+out/
+public/audio*
+public/pfps/
+public/samples/
+public/data/

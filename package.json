@@ -1,0 +1,38 @@
+{
+  "name": "juke-remotion-recap",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "remotion studio",
+    "render": "remotion render",
+    "transcribe": "tsx scripts/1-transcribe.ts",
+    "posttranscribe": "tsx scripts/sync-public.ts",
+    "intros": "tsx scripts/2-detect-intros.ts",
+    "pfps": "tsx scripts/3-resolve-pfps.ts",
+    "postpfps": "tsx scripts/sync-public.ts",
+    "fixup": "tsx scripts/4-fixup-transcript.ts",
+    "postfixup": "tsx scripts/sync-public.ts",
+    "suggest": "tsx scripts/5-suggest-usernames.ts",
+    "review": "tsx scripts/6-review.ts",
+    "waveform": "tsx scripts/7-precompute-waveform.ts",
+    "postwaveform": "tsx scripts/sync-public.ts",
+    "sync": "tsx scripts/sync-public.ts"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.400",
+    "@remotion/gif": "^4.0.400",
+    "@remotion/media": "^4.0.400",
+    "@remotion/media-utils": "^4.0.400",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "remotion": "^4.0.400"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "19.0.0",
+    "dotenv": "^16.4.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.4.5"
+  }
+}
