@@ -86,17 +86,30 @@ async function resolveOne(opts: {
     };
   }
 
+  // Try the Neynar pfp_url first, then self-heal through unavatar (which proxies
+  // the same avatar via its own egress + cache, and can reach hosts like seadn.io
+  // that sometimes refuse a direct fetch). unavatar/farcaster needs no extra data;
+  // unavatar/x is a bonus that lands when the FC and X handles match.
   let pfpPath = DEFAULT_AVATAR;
-  if (user.pfp_url) {
+  const sources = [
+    user.pfp_url,
+    `https://unavatar.io/farcaster/${username}?fallback=false`,
+    `https://unavatar.io/x/${username}?fallback=false`,
+  ].filter((u): u is string => Boolean(u));
+  for (const src of sources) {
     try {
       const tmp = path.join(pfpsDir, `${username}.tmp`);
-      const { contentType } = await downloadPfp({ pfpUrl: user.pfp_url, destPath: tmp });
-      const ext = extFromContentType(contentType, user.pfp_url);
+      const { contentType } = await downloadPfp({ pfpUrl: src, destPath: tmp });
+      const ext = extFromContentType(contentType, src);
       const final = path.join(pfpsDir, `${username}.${ext}`);
       await (await import("node:fs/promises")).rename(tmp, final);
       pfpPath = `/pfps/${username}.${ext}`;
+      if (src !== user.pfp_url) {
+        console.warn(`[3-pfps] @${username}: primary pfp failed, recovered via ${src.includes("/farcaster/") ? "unavatar/farcaster" : "unavatar/x"}`);
+      }
+      break;
     } catch (err) {
-      console.warn(`[3-pfps] PFP download failed for @${username}: ${(err as Error).message}`);
+      console.warn(`[3-pfps] pfp source failed for @${username} (${src.slice(0, 48)}): ${(err as Error).message}`);
     }
   }
 
