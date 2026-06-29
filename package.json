@@ -17,7 +17,8 @@
     "review": "tsx scripts/6-review.ts",
     "waveform": "tsx scripts/7-precompute-waveform.ts",
     "postwaveform": "tsx scripts/sync-public.ts",
-    "sync": "tsx scripts/sync-public.ts"
+    "sync": "tsx scripts/sync-public.ts",
+    "suggest-speakers": "tsx scripts/auto-suggest-speakers.ts"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.400",
