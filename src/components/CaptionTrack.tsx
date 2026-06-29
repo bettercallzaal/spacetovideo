@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useCurrentFrame, useVideoConfig, spring } from "remotion";
+import { useCurrentFrame, useVideoConfig } from "remotion";
 import type { Utterance, Word } from "../data";
 import { theme } from "../theme";
 
@@ -83,13 +83,10 @@ export const CaptionTrack: React.FC<Props> = ({ utterances }) => {
           // Soft fade-in on each new word — covers ~80ms after start time.
           const age = Math.max(0, t - w.start);
           const fade = Math.min(1, age / 0.08);
-          // Karaoke highlight: the word being spoken right now (start <= t < end)
-          // lights up in the brand accent with a quick spring pop, so the eye
-          // tracks the audio instead of reading a static block.
+          // Karaoke highlight: the word being spoken right now lights up in the brand
+          // accent. Cheap color + weight change only - the per-word spring pop made the
+          // render browser-bound and slow (and timed out twice on long audio), so it is gone.
           const isActive = t >= w.start && t < (w.end ?? Infinity);
-          const pop = isActive
-            ? spring({ fps, frame: frame - Math.round(w.start * fps), config: { damping: 10, mass: 0.5 }, durationInFrames: 8 })
-            : 0;
           return (
             // Key by start-time only so words keep identity when the rolling
             // window shifts (slice(-MAX_WORDS) drops oldest); index-based keys
@@ -102,7 +99,6 @@ export const CaptionTrack: React.FC<Props> = ({ utterances }) => {
                 opacity: 0.35 + 0.65 * fade,
                 color: isActive ? theme.orange : theme.textOnDark,
                 fontWeight: isActive ? 700 : 500,
-                transform: `scale(${1 + 0.08 * pop})`,
                 transition: "color 90ms linear",
               }}
             >
