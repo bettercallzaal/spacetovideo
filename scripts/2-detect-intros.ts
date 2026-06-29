@@ -113,6 +113,24 @@ async function main() {
   }
   console.log(`[2-intros] Host intro prompts found: ${promptIndices.length}`);
 
+  // This script is for a ROVING-HOST walkaround, where the host repeatedly asks "who are you?".
+  // A hosted Space / AMA has few or no such prompts (the host introduces one guest, then audience
+  // members just start talking). Detecting that here and routing to the right tool saves a wasted
+  // run that silently produces an empty/static video. See ZAO research doc 916.
+  const speakerCount = new Set(utterances.map((u) => u.speaker).filter((s) => s !== undefined)).size;
+  if (promptIndices.length === 0 || (speakerCount >= 3 && promptIndices.length < speakerCount - 1)) {
+    console.warn(
+      `\n[2-intros] WARNING: only ${promptIndices.length} host intro prompt(s) across ${speakerCount} speakers.\n` +
+      `  This looks like a hosted Space / AMA, not a roving-host walkaround.\n` +
+      `  Intro detection will miss most or all guests, and the render will sit on the host card.\n` +
+      `  Use the hosted-Space path instead:\n` +
+      `    1) HOST_USERNAME=<real-handle> npm run suggest-speakers   # mines name-drops -> a draft speaker map\n` +
+      `    2) fill SPEAKER_TO_USERNAME in scripts/build-speaker-intros.ts, then run it\n` +
+      `    3) HOST_USERNAME=<real-handle> npm run pfps\n` +
+      `  Note: HOST_USERNAME must be the real Farcaster handle (e.g. zaal, not a display name).\n`,
+    );
+  }
+
   const intros: IntroEntry[] = [];
   for (let p = 0; p < promptIndices.length; p++) {
     const idx = promptIndices[p];
