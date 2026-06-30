@@ -28,6 +28,14 @@
   .spk audio { height:30px; width:150px; flex:none; }
   .spk input { flex:1; min-width:0; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:0.45rem 0.6rem; font:inherit; }
   .spk input.empty { border-color:#c0392b; }
+  .spk-in { position:relative; flex:1; min-width:0; }
+  .spk-in input { width:100%; }
+  .ac { position:absolute; top:calc(100% + 2px); left:0; right:0; background:var(--surface); border:1px solid var(--cyan); border-radius:8px; z-index:20; max-height:240px; overflow:auto; box-shadow:0 8px 24px rgba(0,0,0,0.5); }
+  .ac-row { display:flex; align-items:center; gap:0.5rem; padding:0.4rem 0.6rem; cursor:pointer; }
+  .ac-row:hover { background:var(--bg); }
+  .ac-row img { width:26px; height:26px; border-radius:50%; flex:none; background:var(--bg); }
+  .ac-row .h { color:var(--cyan); font-size:0.85rem; font-weight:600; }
+  .ac-row .d { color:var(--dim); font-size:0.74rem; }
   .spk .sx { color:var(--dim); font-size:0.74rem; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   button { font:inherit; font-weight:600; padding:0.6rem 1.3rem; border-radius:999px; border:0; cursor:pointer; }
   button.go { background:var(--gold); color:#1a1402; }
@@ -100,10 +108,28 @@ async function loadSpeakers(){
     <div class="spk">
       <span class="meta">sp${s.speaker} · ${s.minutes}m · ${s.first_at}</span>
       <audio controls preload="none" src="${s.sample}"></audio>
-      <input data-sp="${s.speaker}" placeholder="@handle" value="${(s.current||s.suggested||'').replace(/"/g,'')}">
+      <div class="spk-in"><input data-sp="${s.speaker}" autocomplete="off" placeholder="type a name to search Farcaster" value="${(s.current||s.suggested||'').replace(/"/g,'')}"><div class="ac" id="ac-${s.speaker}"></div></div>
     </div>`).join("");
-  $("#spk-list").querySelectorAll("input").forEach(i => i.addEventListener("input", validate));
+  $("#spk-list").querySelectorAll("input").forEach(i => {
+    i.addEventListener("input", () => { validate(); searchHandles(i); });
+    i.addEventListener("blur", () => setTimeout(() => closeAc(i.dataset.sp), 200));
+  });
   validate();
+}
+let acTimers = {};
+function closeAc(sp){ const d=document.getElementById("ac-"+sp); if(d) d.innerHTML=""; }
+function searchHandles(input){
+  const sp = input.dataset.sp; const q = input.value.trim().replace(/^@/,"");
+  clearTimeout(acTimers[sp]);
+  if (q.length < 2) { closeAc(sp); return; }
+  acTimers[sp] = setTimeout(async () => {
+    const rows = await api("/api/neynar/search?q=" + encodeURIComponent(q));
+    const d = document.getElementById("ac-"+sp);
+    if (!d) return;
+    if (!rows.length) { d.innerHTML = ""; return; }
+    d.innerHTML = rows.map(u => `<div class="ac-row" data-u="${u.username}"><img src="${u.pfp||''}" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'"><div><div class="h">@${u.username}</div><div class="d">${(u.display||"").replace(/</g,"")} · ${u.followers} followers</div></div></div>`).join("");
+    d.querySelectorAll(".ac-row").forEach(r => r.addEventListener("mousedown", () => { input.value = r.dataset.u; closeAc(sp); validate(); }));
+  }, 280);
 }
 function validate(){
   const inputs = [...$("#spk-list").querySelectorAll("input")];

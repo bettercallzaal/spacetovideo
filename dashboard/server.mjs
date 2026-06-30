@@ -123,6 +123,25 @@ function spliceProgress() {
   return { running: isRunning, phase, pct: isRunning ? pct : (file.valid ? 100 : 0), file };
 }
 
+// ---- Neynar handle search (autocomplete in the speaker step) ----
+function neynarKey() {
+  try {
+    const e = fs.readFileSync(path.join(ROOT, ".env"), "utf8");
+    const m = e.match(/NEYNAR_API_KEY\s*=\s*(.+)/);
+    return m ? m[1].trim().replace(/^["']|["']$/g, "") : "";
+  } catch { return ""; }
+}
+async function neynarSearch(q) {
+  const key = neynarKey();
+  if (!key || !q || q.length < 2) return [];
+  try {
+    const r = await fetch("https://api.neynar.com/v2/farcaster/user/search?q=" + encodeURIComponent(q) + "&limit=6",
+      { headers: { "x-api-key": key, accept: "application/json" } });
+    const d = await r.json();
+    return (d.result?.users || []).map((u) => ({ username: u.username, fid: u.fid, display: u.display_name, pfp: u.pfp_url, followers: u.follower_count || 0 }));
+  } catch { return []; }
+}
+
 // ---- speakers (the human-in-the-loop name step) ----
 function getSpeakers() {
   try { return JSON.parse(fs.readFileSync(path.join(ROOT, "data", "speakers-ui.json"), "utf8")); }
@@ -173,6 +192,7 @@ const srv = http.createServer((req, res) => {
     res.writeHead(404); res.end("no sample"); return;
   }
   if (u.pathname === "/api/config") return send({ title: loadConfig().title, hasIntro: !!loadConfig().intro && fs.existsSync(loadConfig().intro), hasOutro: !!loadConfig().outro && fs.existsSync(loadConfig().outro), hasAudio: fs.existsSync(path.join(ROOT, "public", "audio.ogg")) });
+  if (u.pathname === "/api/neynar/search") { neynarSearch(u.searchParams.get("q") || "").then((r) => send(r)); return; }
   if (u.pathname === "/api/speakers" && req.method === "GET") return send(getSpeakers());
   if (u.pathname === "/api/speakers/progress") return send(speakerBuildProgress());
   if (u.pathname === "/api/speakers" && req.method === "POST") {
