@@ -19,12 +19,25 @@ loadEnv({ path: path.join(ROOT, ".env") });
 // Manual mapping derived by running `npm run transcribe` then inspecting
 // data/transcript.json to see which speaker_id is which person.
 // Fill this in before running this script.
-const SPEAKER_TO_USERNAME: Record<number, string> = {
-  0: "alice",   // replace with actual Farcaster handles
-  1: "bob",
-  2: "carol",
-  // add more speakers as needed
+let SPEAKER_TO_USERNAME: Record<number, string> = {
+  1: "zaal",            // host - BetterCallZaal
+  2: "farcaster",       // The Farcaster Intern (the guest)
+  0: "imanafrikah",     // intro music Zaal played - "Music by Iman"
+  3: "bennyj504",       // Benny J ("What up, Benny?")
+  4: "mxjxn",           // channel-debate asker
+  5: "topocount.eth",   // topocount - was wrongly left as "Guest"; he spoke (channel debate)
 };
+
+// Optional per-speaker display label, shown on the card instead of the @handle.
+let SPEAKER_DISPLAY: Record<number, string> = {
+  0: "Music by Iman",
+};
+
+// Dashboard override: if data/speaker-map.json exists (written by the dashboard's speaker
+// step), it takes precedence - that is how a human-confirmed map drives the build.
+import { readFileSync } from "node:fs";
+try { SPEAKER_TO_USERNAME = JSON.parse(readFileSync(path.join(import.meta.dirname, "..", "data", "speaker-map.json"), "utf8")); } catch {}
+try { SPEAKER_DISPLAY = JSON.parse(readFileSync(path.join(import.meta.dirname, "..", "data", "speaker-display.json"), "utf8")); } catch {}
 
 const HOST_USERNAME = process.env.HOST_USERNAME ?? "";
 if (!HOST_USERNAME) {
@@ -124,7 +137,7 @@ async function main() {
       context_snippet: `[speaker ${run.speaker}] ${run.transcript.slice(0, 200)}`,
       sample_audio: "",
       username,
-      display_name: "",
+      display_name: SPEAKER_DISPLAY[run.speaker] ?? "",
     };
   });
 

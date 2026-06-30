@@ -1,0 +1,172 @@
+// Local dashboard for the recap pipeline - press go, watch progress, splice bookends.
+// Dependency-free: Node built-ins + the remotion/ffmpeg CLIs already in the project.
+//   node dashboard/server.mjs   ->   http://localhost:4747
+import http from "node:http";
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const OUT = path.join(ROOT, "out");
+const PORT = 4747;
+const TOTAL_FRAMES = 115055; // SpaceRecap @ 30fps for this AMA; recomputed from the log if present
+const RECAP_SEC = 3835; // hour audio duration, for splice % estimate
+
+// ---- helpers ----
+function tail(file, bytes = 4000) {
+  try {
+    const fd = fs.openSync(file, "r");
+    const sz = fs.fstatSync(fd).size;
+    const start = Math.max(0, sz - bytes);
+    const buf = Buffer.alloc(sz - start);
+    fs.readSync(fd, buf, 0, buf.length, start);
+    fs.closeSync(fd);
+    return buf.toString("utf8");
+  } catch { return ""; }
+}
+function running(pattern) {
+  // crude: is a process matching pattern alive? use pgrep
+  try {
+    const r = spawnSyncText("pgrep", ["-f", pattern]);
+    return r.trim().length > 0;
+  } catch { return false; }
+}
+import { spawnSync } from "node:child_process";
+function spawnSyncText(cmd, args) {
+  const r = spawnSync(cmd, args, { encoding: "utf8" });
+  return (r.stdout || "") + (r.status === 0 ? "" : "");
+}
+function ffprobeDur(file) {
+  if (!fs.existsSync(file)) return 0;
+  const r = spawnSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file], { encoding: "utf8" });
+  return parseFloat((r.stdout || "0").trim()) || 0;
+}
+function fileInfo(file) {
+  if (!fs.existsSync(file)) return { exists: false };
+  const st = fs.statSync(file);
+  const dur = ffprobeDur(file);
+  return { exists: true, size: st.size, sizeMB: Math.round(st.size / 1048576), dur: Math.round(dur), valid: dur > 3000 };
+}
+
+// ---- render ----
+let renderProc = null;
+function startRender() {
+  if (running("remotion render")) return { ok: false, reason: "already running" };
+  try { fs.unlinkSync(path.join(OUT, "space-recap.mp4")); } catch {}
+  const log = fs.openSync(path.join(ROOT, "render-full.log"), "w");
+  renderProc = spawn("npx", ["remotion", "render", "SpaceRecap", "out/space-recap.mp4", "--concurrency=2", "--timeout=300000"],
+    { cwd: ROOT, stdio: ["ignore", log, log], detached: true });
+  renderProc.unref();
+  return { ok: true };
+}
+function renderProgress() {
+  const log = tail(path.join(ROOT, "render-full.log"));
+  const isRunning = running("remotion render");
+  const rm = [...log.matchAll(/Rendered (\d+)\/(\d+)/g)].pop();
+  const em = [...log.matchAll(/Encoded (\d+)\/(\d+)/g)].pop();
+  const eta = (log.match(/time remaining: ([0-9hm s]+)/g) || []).pop() || "";
+  const errors = (log.match(/Error|Timed out|timeout/gi) || []).length;
+  let phase = "idle", frame = 0, total = TOTAL_FRAMES, pct = 0;
+  if (em) { phase = "encoding"; frame = +em[1]; total = +em[2]; pct = Math.round((frame / total) * 100); }
+  else if (rm) { phase = "rendering"; frame = +rm[1]; total = +rm[2]; pct = Math.round((frame / total) * 100); }
+  const file = fileInfo(path.join(OUT, "space-recap.mp4"));
+  if (!isRunning && file.valid) { phase = "done"; pct = 100; }
+  return { running: isRunning, phase, frame, total, pct, eta: (eta || "").replace("time remaining: ", ""), errors, file };
+}
+
+// ---- splice (intro + recap + outro) ----
+function startSplice() {
+  const intro = path.join(OUT, "parts/intro-norm.mp4");
+  const outro = path.join(OUT, "parts/outro-norm.mp4");
+  const recap = path.join(OUT, "space-recap.mp4");
+  if (![intro, outro, recap].every(fs.existsSync)) return { ok: false, reason: "missing inputs (render + normalize bookends first)" };
+  if (running("concat=n=3")) return { ok: false, reason: "already splicing" };
+  try { fs.unlinkSync(path.join(OUT, "space-recap-bookended.mp4")); } catch {}
+  const log = fs.openSync(path.join(ROOT, "splice.log"), "w");
+  const args = ["-y", "-i", intro, "-i", recap, "-i", outro,
+    "-filter_complex", "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[v][a]",
+    "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "medium", "-crf", "19",
+    "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "48000", "-b:a", "192k", "-movflags", "+faststart",
+    "out/space-recap-bookended.mp4"];
+  const p = spawn("ffmpeg", args, { cwd: ROOT, stdio: ["ignore", log, log], detached: true });
+  p.unref();
+  return { ok: true };
+}
+function spliceProgress() {
+  const log = tail(path.join(ROOT, "splice.log"));
+  const isRunning = running("concat=n=3");
+  const t = (log.match(/time=(\d+):(\d+):(\d+)/g) || []).pop();
+  let secs = 0;
+  if (t) { const m = t.match(/time=(\d+):(\d+):(\d+)/); secs = (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]); }
+  const pct = Math.min(100, Math.round((secs / (RECAP_SEC + 27)) * 100));
+  const file = fileInfo(path.join(OUT, "space-recap-bookended.mp4"));
+  let phase = isRunning ? "splicing" : (file.valid ? "done" : "idle");
+  return { running: isRunning, phase, pct: isRunning ? pct : (file.valid ? 100 : 0), file };
+}
+
+// ---- speakers (the human-in-the-loop name step) ----
+function getSpeakers() {
+  try { return JSON.parse(fs.readFileSync(path.join(ROOT, "data", "speakers-ui.json"), "utf8")); }
+  catch { return []; }
+}
+function startSpeakerBuild(map, display) {
+  // map: { "0": "handle", ... }. Every speaker must be non-empty (enforced client-side too).
+  fs.writeFileSync(path.join(ROOT, "data", "speaker-map.json"), JSON.stringify(map, null, 2));
+  fs.writeFileSync(path.join(ROOT, "data", "speaker-display.json"), JSON.stringify(display || {}, null, 2));
+  const log = fs.openSync(path.join(ROOT, "speakers.log"), "w");
+  // chain: build-speaker-intros -> pfps. A tiny sh wrapper so both run in order, logged.
+  const sh = `cd ${JSON.stringify(ROOT)} && HOST_USERNAME=${JSON.stringify(map["1"] || map["0"] || "zaal")} npx tsx scripts/build-speaker-intros.ts && HOST_USERNAME=${JSON.stringify(map["1"] || "zaal")} npx tsx scripts/3-resolve-pfps.ts && echo "SPEAKER_BUILD_DONE"`;
+  const p = spawn("bash", ["-lc", sh], { cwd: ROOT, stdio: ["ignore", log, log], detached: true });
+  p.unref();
+  return { ok: true };
+}
+function speakerBuildProgress() {
+  const log = tail(path.join(ROOT, "speakers.log"), 6000);
+  const done = /SPEAKER_BUILD_DONE/.test(log);
+  const isRunning = running("build-speaker-intros") || running("3-resolve-pfps");
+  let step = "idle";
+  if (/3-resolve-pfps|pfp/i.test(log) && !done) step = "resolving pfps";
+  else if (/build-speaker-intros|guest runs/i.test(log) && !done) step = "building segments";
+  if (done) step = "done";
+  // count resolved pfps
+  let resolved = 0, defaults = 0;
+  try { const p = JSON.parse(fs.readFileSync(path.join(ROOT, "data", "profiles.json"), "utf8")); const seen = new Set(); for (const g of p.guests) { if (seen.has(g.username)) continue; seen.add(g.username); if (g.pfp_path.includes("default")) defaults++; else resolved++; } } catch {}
+  return { running: isRunning, step, done, resolved, defaults, log: log.split("\n").slice(-6).join("\n") };
+}
+
+function reveal(rel) {
+  const f = path.join(OUT, path.basename(rel));
+  if (fs.existsSync(f)) spawn("open", ["-R", f]);
+}
+
+// ---- server ----
+const INDEX = path.join(ROOT, "dashboard", "index.html");
+const srv = http.createServer((req, res) => {
+  const u = new URL(req.url, "http://localhost");
+  const send = (obj, code = 200) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(obj)); };
+  if (req.method === "GET" && u.pathname === "/") {
+    res.writeHead(200, { "content-type": "text/html" }); res.end(fs.readFileSync(INDEX)); return;
+  }
+  // serve speaker audio samples
+  if (req.method === "GET" && u.pathname.startsWith("/speaker-samples/")) {
+    const f = path.join(ROOT, "public", "speaker-samples", path.basename(u.pathname));
+    if (fs.existsSync(f)) { res.writeHead(200, { "content-type": "audio/mpeg" }); fs.createReadStream(f).pipe(res); return; }
+    res.writeHead(404); res.end("no sample"); return;
+  }
+  if (u.pathname === "/api/speakers" && req.method === "GET") return send(getSpeakers());
+  if (u.pathname === "/api/speakers/progress") return send(speakerBuildProgress());
+  if (u.pathname === "/api/speakers" && req.method === "POST") {
+    let body = ""; req.on("data", (c) => (body += c)); req.on("end", () => {
+      try { const { map, display } = JSON.parse(body || "{}"); send(startSpeakerBuild(map, display)); }
+      catch (e) { send({ ok: false, reason: String(e) }, 400); }
+    }); return;
+  }
+  if (u.pathname === "/api/render/progress") return send(renderProgress());
+  if (u.pathname === "/api/splice/progress") return send(spliceProgress());
+  if (req.method === "POST" && u.pathname === "/api/render") return send(startRender());
+  if (req.method === "POST" && u.pathname === "/api/splice") return send(startSplice());
+  if (req.method === "POST" && u.pathname === "/api/reveal") return send((reveal(u.searchParams.get("f") || ""), { ok: true }));
+  res.writeHead(404); res.end("not found");
+});
+srv.listen(PORT, () => console.log(`\n  Recap dashboard -> http://localhost:${PORT}\n  (Ctrl+C to stop)\n`));
