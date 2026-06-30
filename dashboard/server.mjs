@@ -123,6 +123,32 @@ function spliceProgress() {
   return { running: isRunning, phase, pct: isRunning ? pct : (file.valid ? 100 : 0), file };
 }
 
+// ---- transcribe (Step 0: audio -> transcript -> suggestions -> samples) ----
+function startTranscribe() {
+  if (!fs.existsSync(path.join(ROOT, "public", "audio.ogg"))) return { ok: false, reason: "drop your audio at public/audio.ogg first" };
+  if (running("dashboard_transcribe")) return { ok: false, reason: "already transcribing" };
+  const log = fs.openSync(path.join(ROOT, "transcribe.log"), "w");
+  // dashboard_transcribe marker so pgrep can find this chain; runs the three steps in order.
+  const sh = `cd ${JSON.stringify(ROOT)} && echo dashboard_transcribe && npm run transcribe && npm run suggest-speakers && node scripts/make-speaker-samples.mjs && echo TRANSCRIBE_DONE`;
+  const p = spawn("bash", ["-lc", sh], { cwd: ROOT, stdio: ["ignore", log, log], detached: true });
+  p.unref();
+  return { ok: true };
+}
+function transcribeProgress() {
+  const log = tail(path.join(ROOT, "transcribe.log"), 6000);
+  const isRunning = running("dashboard_transcribe");
+  const done = /TRANSCRIBE_DONE/.test(log);
+  let step = "idle";
+  if (!done && isRunning) {
+    if (/make-speaker-samples|speakers-ui/i.test(log)) step = "slicing speaker samples";
+    else if (/suggest-speakers|name-drop/i.test(log)) step = "suggesting handles";
+    else if (/transcrib|deepgram|nova/i.test(log)) step = "transcribing (Deepgram)";
+    else step = "starting";
+  }
+  if (done) step = "done";
+  return { running: isRunning, done, step, log: log.split("\n").slice(-5).join("\n") };
+}
+
 // ---- Neynar handle search (autocomplete in the speaker step) ----
 function neynarKey() {
   try {
@@ -193,6 +219,8 @@ const srv = http.createServer((req, res) => {
   }
   if (u.pathname === "/api/config") return send({ title: loadConfig().title, hasIntro: !!loadConfig().intro && fs.existsSync(loadConfig().intro), hasOutro: !!loadConfig().outro && fs.existsSync(loadConfig().outro), hasAudio: fs.existsSync(path.join(ROOT, "public", "audio.ogg")) });
   if (u.pathname === "/api/neynar/search") { neynarSearch(u.searchParams.get("q") || "").then((r) => send(r)); return; }
+  if (u.pathname === "/api/transcribe/progress") return send(transcribeProgress());
+  if (req.method === "POST" && u.pathname === "/api/transcribe") return send(startTranscribe());
   if (u.pathname === "/api/speakers" && req.method === "GET") return send(getSpeakers());
   if (u.pathname === "/api/speakers/progress") return send(speakerBuildProgress());
   if (u.pathname === "/api/speakers" && req.method === "POST") {

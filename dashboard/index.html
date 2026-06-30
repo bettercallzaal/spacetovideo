@@ -56,8 +56,16 @@
   <p class="sub pixel">drop the audio in public/audio.ogg, name the speakers, press go.</p>
   <p class="ready-line" id="ready-line">checking setup...</p>
 
+  <div class="step" id="step-load">
+    <h2><span class="n">1</span> Load + transcribe <span class="ready">DONE</span></h2>
+    <p class="hint">Drop your audio at <code>public/audio.ogg</code>, then transcribe (Deepgram) + auto-suggest speaker handles + cut samples. Skip if a transcript already exists.</p>
+    <button class="go" id="tr-btn">Transcribe</button>
+    <span class="status" id="tr-status" style="margin-left:0.8rem;">idle</span>
+    <div class="bar" style="margin-top:0.6rem;"><div id="tr-bar"></div></div>
+  </div>
+
   <div class="step" id="step-spk">
-    <h2><span class="n">1</span> Confirm the speakers <span class="ready">READY</span></h2>
+    <h2><span class="n">2</span> Confirm the speakers <span class="ready">READY</span></h2>
     <p class="hint">Listen to each voice and type their Farcaster handle. Every speaker needs a name - no "Guest." (Pre-filled from auto-detect; fix any.)</p>
     <div id="spk-list">loading speakers...</div>
     <div style="margin-top:0.9rem; display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
@@ -68,7 +76,7 @@
   </div>
 
   <div class="step locked" id="step-render">
-    <h2><span class="n">2</span> Render the hour <span class="ready">READY</span></h2>
+    <h2><span class="n">3</span> Render the hour <span class="ready">READY</span></h2>
     <p class="hint">Renders the full recap video with the confirmed speakers. ~1 hour, stable.</p>
     <button class="go" id="render-btn">Render</button>
     <div class="bar"><div id="render-bar"></div></div>
@@ -77,7 +85,7 @@
   </div>
 
   <div class="step locked" id="step-splice">
-    <h2><span class="n">3</span> Add intro + outro <span class="ready">DONE</span></h2>
+    <h2><span class="n">4</span> Add intro + outro <span class="ready">DONE</span></h2>
     <p class="hint">Bookends the render with your intro and outro templates (set in config.json).</p>
     <button class="go2" id="splice-btn">Add bookends</button>
     <div class="bar"><div id="splice-bar"></div></div>
@@ -197,6 +205,21 @@ async function pollSplice(){
 window.reveal = (f) => api("/api/reveal?f="+encodeURIComponent(f), { method:"POST" });
 
 loadConfig(); loadSpeakers();
+$("#tr-btn").addEventListener("click", async () => {
+  $("#tr-btn").disabled = true;
+  const r = await api("/api/transcribe", { method:"POST" });
+  if (!r.ok) { $("#tr-status").textContent = r.reason; $("#tr-btn").disabled = false; return; }
+  pollTranscribe();
+});
+async function pollTranscribe(){
+  const p = await api("/api/transcribe/progress");
+  $("#tr-status").textContent = p.running ? ("working... " + p.step) : (p.done ? "done - speakers refreshed" : "idle");
+  $("#tr-bar").style.width = p.running ? "60%" : (p.done ? "100%" : "0%");
+  if (p.running) { setTimeout(pollTranscribe, 2500); return; }
+  if (p.done) { $("#step-load").classList.add("done"); await loadSpeakers(); }
+  $("#tr-btn").disabled = false;
+}
+api("/api/transcribe/progress").then(p => { if (p.running) { $("#tr-btn").disabled = true; pollTranscribe(); } });
 // resume any in-flight work on load
 api("/api/render/progress").then(p => { if (p.running) { $("#step-render").classList.remove("locked"); $("#render-btn").disabled=true; pollRender(); } if(p.phase==="done"){$("#step-render").classList.remove("locked");$("#step-splice").classList.remove("locked");} });
 api("/api/splice/progress").then(p => { if (p.running) { $("#step-splice").classList.remove("locked"); $("#splice-btn").disabled=true; pollSplice(); } });
