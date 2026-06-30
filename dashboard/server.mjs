@@ -10,6 +10,14 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(ROOT, "out");
 const PORT = 4747;
+
+// Fork-friendly config: copy config.example.json -> config.json and set your title +
+// intro/outro template paths. Falls back to sensible defaults if absent.
+function loadConfig() {
+  const def = { title: "Space Recap", intro: "", outro: "" };
+  try { return { ...def, ...JSON.parse(fs.readFileSync(path.join(ROOT, "config.json"), "utf8")) }; }
+  catch { return def; }
+}
 const TOTAL_FRAMES = 115055; // SpaceRecap @ 30fps for this AMA; recomputed from the log if present
 const RECAP_SEC = 3835; // hour audio duration, for splice % estimate
 
@@ -77,25 +85,35 @@ function renderProgress() {
 
 // ---- splice (intro + recap + outro) ----
 function startSplice() {
-  const intro = path.join(OUT, "parts/intro-norm.mp4");
-  const outro = path.join(OUT, "parts/outro-norm.mp4");
+  const cfg = loadConfig();
   const recap = path.join(OUT, "space-recap.mp4");
-  if (![intro, outro, recap].every(fs.existsSync)) return { ok: false, reason: "missing inputs (render + normalize bookends first)" };
-  if (running("concat=n=3")) return { ok: false, reason: "already splicing" };
+  const intro = cfg.intro && fs.existsSync(cfg.intro) ? cfg.intro : "";
+  const outro = cfg.outro && fs.existsSync(cfg.outro) ? cfg.outro : "";
+  if (!fs.existsSync(recap)) return { ok: false, reason: "render the recap first" };
+  if (!intro && !outro) return { ok: false, reason: "set intro/outro paths in config.json" };
+  if (running("zg_splice")) return { ok: false, reason: "already splicing" };
   try { fs.unlinkSync(path.join(OUT, "space-recap-bookended.mp4")); } catch {}
   const log = fs.openSync(path.join(ROOT, "splice.log"), "w");
-  const args = ["-y", "-i", intro, "-i", recap, "-i", outro,
-    "-filter_complex", "[0:v][0:a][1:v][1:a][2:v][2:a]concat=n=3:v=1:a=1[v][a]",
-    "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "medium", "-crf", "19",
-    "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "48000", "-b:a", "192k", "-movflags", "+faststart",
-    "out/space-recap-bookended.mp4"];
+  // One ffmpeg pass: scale/pad each clip to 1920x1080, resample audio to 48k, then concat.
+  // Handles any input size/codec/rate from a fork's own intro/outro templates.
+  const inputs = [intro, recap, outro].filter(Boolean);
+  const norm = (i) => `[${i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p[v${i}];[${i}:a]aresample=48000,aformat=channel_layouts=stereo[a${i}]`;
+  const chains = inputs.map((_, i) => norm(i)).join(";");
+  const concatIns = inputs.map((_, i) => `[v${i}][a${i}]`).join("");
+  const filter = `${chains};${concatIns}concat=n=${inputs.length}:v=1:a=1[v][a]`;
+  const args = ["-y"];
+  inputs.forEach((f) => args.push("-i", f));
+  args.push("-filter_complex", filter, "-map", "[v]", "-map", "[a]",
+    "-c:v", "libx264", "-preset", "medium", "-crf", "19", "-pix_fmt", "yuv420p",
+    "-c:a", "aac", "-ar", "48000", "-b:a", "192k", "-movflags", "+faststart",
+    "-metadata", "zg_splice=1", "out/space-recap-bookended.mp4");
   const p = spawn("ffmpeg", args, { cwd: ROOT, stdio: ["ignore", log, log], detached: true });
   p.unref();
   return { ok: true };
 }
 function spliceProgress() {
   const log = tail(path.join(ROOT, "splice.log"));
-  const isRunning = running("concat=n=3");
+  const isRunning = running("zg_splice");
   const t = (log.match(/time=(\d+):(\d+):(\d+)/g) || []).pop();
   let secs = 0;
   if (t) { const m = t.match(/time=(\d+):(\d+):(\d+)/); secs = (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]); }
@@ -154,6 +172,7 @@ const srv = http.createServer((req, res) => {
     if (fs.existsSync(f)) { res.writeHead(200, { "content-type": "audio/mpeg" }); fs.createReadStream(f).pipe(res); return; }
     res.writeHead(404); res.end("no sample"); return;
   }
+  if (u.pathname === "/api/config") return send({ title: loadConfig().title, hasIntro: !!loadConfig().intro && fs.existsSync(loadConfig().intro), hasOutro: !!loadConfig().outro && fs.existsSync(loadConfig().outro), hasAudio: fs.existsSync(path.join(ROOT, "public", "audio.ogg")) });
   if (u.pathname === "/api/speakers" && req.method === "GET") return send(getSpeakers());
   if (u.pathname === "/api/speakers/progress") return send(speakerBuildProgress());
   if (u.pathname === "/api/speakers" && req.method === "POST") {

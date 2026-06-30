@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ZABAL Gamez - Recap Pipeline</title>
+<title>spacetovideo - recap pipeline</title>
 <style>
   :root { --gold:#F5C842; --cyan:#00E5FF; --bg:#0a0a16; --surface:#161628; --border:#2a2a4a; --text:#e8e8f0; --dim:#8a8a9a; }
   * { box-sizing: border-box; }
@@ -14,7 +14,13 @@
   .step { border:1px solid var(--border); border-radius:14px; background:var(--surface); padding:1.1rem 1.2rem; margin-bottom:1rem; }
   .step.locked { opacity:0.5; pointer-events:none; }
   .step h2 { font-size:1.05rem; margin:0 0 0.2rem; display:flex; align-items:center; gap:0.5rem; }
-  .step h2 .n { width:24px; height:24px; border-radius:50%; background:var(--gold); color:#1a1402; font-size:0.8rem; font-weight:700; display:inline-flex; align-items:center; justify-content:center; }
+  .step h2 .n { width:24px; height:24px; border-radius:50%; background:var(--gold); color:#1a1402; font-size:0.8rem; font-weight:700; display:inline-flex; align-items:center; justify-content:center; transition:background 0.3s; }
+  .step.done h2 .n { background:var(--cyan); color:#04121a; }
+  .step.done h2 .ready { color:var(--cyan); font-family:ui-monospace,monospace; font-size:0.7rem; letter-spacing:1px; margin-left:auto; }
+  .ready { display:none; }
+  .step.done .ready { display:inline; }
+  .ready-line { font-family:ui-monospace,monospace; font-size:0.78rem; color:var(--dim); margin:0 0 1.4rem; }
+  .ready-line b { color:var(--cyan); } .ready-line .miss { color:#c0793f; }
   .step .hint { color:var(--dim); font-size:0.85rem; margin:0 0 0.8rem; }
   .spk { display:flex; align-items:center; gap:0.7rem; padding:0.55rem 0; border-bottom:1px solid var(--border); }
   .spk:last-child{border-bottom:0;}
@@ -38,11 +44,12 @@
 </head>
 <body>
 <div class="wrap">
-  <h1><span class="a">ZABAL</span> <span class="b">GAMEZ</span> - Recap Pipeline</h1>
+  <h1><span class="a">space</span><span class="b">tovideo</span> <span style="color:var(--dim);font-weight:400;font-size:1rem;" id="cfg-title"></span></h1>
   <p class="sub pixel">drop the audio in public/audio.ogg, name the speakers, press go.</p>
+  <p class="ready-line" id="ready-line">checking setup...</p>
 
   <div class="step" id="step-spk">
-    <h2><span class="n">1</span> Confirm the speakers</h2>
+    <h2><span class="n">1</span> Confirm the speakers <span class="ready">READY</span></h2>
     <p class="hint">Listen to each voice and type their Farcaster handle. Every speaker needs a name - no "Guest." (Pre-filled from auto-detect; fix any.)</p>
     <div id="spk-list">loading speakers...</div>
     <div style="margin-top:0.9rem; display:flex; align-items:center; gap:0.8rem; flex-wrap:wrap;">
@@ -53,7 +60,7 @@
   </div>
 
   <div class="step locked" id="step-render">
-    <h2><span class="n">2</span> Render the hour</h2>
+    <h2><span class="n">2</span> Render the hour <span class="ready">READY</span></h2>
     <p class="hint">Renders the full recap video with the confirmed speakers. ~1 hour, stable.</p>
     <button class="go" id="render-btn">Render</button>
     <div class="bar"><div id="render-bar"></div></div>
@@ -62,8 +69,8 @@
   </div>
 
   <div class="step locked" id="step-splice">
-    <h2><span class="n">3</span> Add intro + outro</h2>
-    <p class="hint">Bookends the render with the ZABAL Gamez intro and outro templates.</p>
+    <h2><span class="n">3</span> Add intro + outro <span class="ready">DONE</span></h2>
+    <p class="hint">Bookends the render with your intro and outro templates (set in config.json).</p>
     <button class="go2" id="splice-btn">Add bookends</button>
     <div class="bar"><div id="splice-bar"></div></div>
     <div class="status" id="splice-status">idle</div>
@@ -76,6 +83,14 @@ const $ = s => document.querySelector(s);
 const api = (p, opt) => fetch(p, opt).then(r => r.json());
 function mb(n){ return Math.round(n/1048576)+"MB"; }
 
+async function loadConfig(){
+  const c = await api("/api/config");
+  $("#cfg-title").textContent = c.title ? ("- "+c.title) : "";
+  const bits=[]; bits.push(c.hasAudio?"<b>audio loaded</b>":"<span class=\"miss\">no audio (drop public/audio.ogg)</span>");
+  bits.push(c.hasIntro?"<b>intro set</b>":"<span class=\"miss\">no intro (config.json)</span>");
+  bits.push(c.hasOutro?"<b>outro set</b>":"<span class=\"miss\">no outro (config.json)</span>");
+  $("#ready-line").innerHTML = bits.join("  ·  ");
+}
 // ---- step 1: speakers ----
 let speakers = [];
 async function loadSpeakers(){
@@ -117,6 +132,7 @@ async function pollSpeakers(){
   if (p.done) {
     if (p.defaults > 0) $("#spk-warn").textContent = `${p.defaults} speaker(s) fell back to a default avatar - check the handle is exact, then rebuild.`;
     $("#step-render").classList.remove("locked");
+    $("#step-spk").classList.add("done");
     $("#spk-build").disabled = false;
   } else { $("#spk-build").disabled = false; }
 }
@@ -133,7 +149,7 @@ async function pollRender(){
   $("#render-status").textContent = `${p.phase} ${p.pct}% (${p.frame}/${p.total}) ${p.eta?("· "+p.eta):""} ${p.errors?("· "+p.errors+" errors"):""}`;
   if (p.file && p.file.exists) $("#render-file").innerHTML = `space-recap.mp4 · ${mb(p.file.size)} · ${p.file.dur}s <a onclick="reveal('space-recap.mp4')">reveal</a>`;
   if (p.running || p.phase==="encoding") { setTimeout(pollRender, 3000); return; }
-  if (p.phase==="done") { $("#step-splice").classList.remove("locked"); $("#render-btn").disabled = false; }
+  if (p.phase==="done") { $("#step-render").classList.add("done"); $("#step-splice").classList.remove("locked"); $("#render-btn").disabled = false; }
   else $("#render-btn").disabled = false;
 }
 
@@ -149,11 +165,12 @@ async function pollSplice(){
   $("#splice-status").textContent = `${p.phase} ${p.pct}%`;
   if (p.file && p.file.exists) $("#splice-file").innerHTML = `space-recap-bookended.mp4 · ${mb(p.file.size)} · ${p.file.dur}s <a onclick="reveal('space-recap-bookended.mp4')">reveal</a>`;
   if (p.running) { setTimeout(pollSplice, 2500); return; }
+  if (p.file && p.file.valid) $("#step-splice").classList.add("done");
   $("#splice-btn").disabled = false;
 }
 window.reveal = (f) => api("/api/reveal?f="+encodeURIComponent(f), { method:"POST" });
 
-loadSpeakers();
+loadConfig(); loadSpeakers();
 // resume any in-flight work on load
 api("/api/render/progress").then(p => { if (p.running) { $("#step-render").classList.remove("locked"); $("#render-btn").disabled=true; pollRender(); } if(p.phase==="done"){$("#step-render").classList.remove("locked");$("#step-splice").classList.remove("locked");} });
 api("/api/splice/progress").then(p => { if (p.running) { $("#step-splice").classList.remove("locked"); $("#splice-btn").disabled=true; pollSplice(); } });
