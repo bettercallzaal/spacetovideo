@@ -9,6 +9,7 @@ import { Waveform } from "../components/Waveform";
 import { CaptionTrack } from "../components/CaptionTrack";
 import { TitleCard } from "../components/TitleCard";
 import { TimeBadge } from "../components/TimeBadge";
+import { ProgressBar } from "../components/ProgressBar";
 import { useActiveGuest } from "../hooks/useActiveGuest";
 
 export type SpaceRecapProps = {
@@ -65,6 +66,9 @@ export const SpaceRecap: React.FC<SpaceRecapProps> = ({
 
       {/* Bottom-right time badge */}
       <TimeBadge totalSec={totalSec} />
+
+      {/* Bottom progress bar */}
+      <ProgressBar />
 
       {/* Footer caveat */}
       <div

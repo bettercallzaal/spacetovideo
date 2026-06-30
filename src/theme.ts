@@ -1,12 +1,14 @@
-// Brand tokens — mirrors landing/app/globals.css
+// Brand tokens - ZABAL Gamez arcade palette (gold + cyan on near-black cabinet).
+// `orange`/`purple` keep their names so components don't change, but now carry the
+// ZABAL gold + cyan so the whole recap reskins from this one file.
 export const theme = {
-  navy: "#0f0f23",
-  surface: "#1a1a2e",
+  navy: "#0a0a16",
+  surface: "#161628",
   border: "#2a2a4a",
-  orange: "#D85A30",
-  orangeHover: "#E6693F",
-  purple: "#855DCD",
-  purpleHover: "#9670DB",
+  orange: "#F5C842", // ZABAL gold - primary accent (rings, active caption word, labels)
+  orangeHover: "#FFD95E",
+  purple: "#00E5FF", // ZABAL cyan - secondary accent (waveform tail, glow)
+  purpleHover: "#4DEEFF",
   cream: "#FFF8F0",
   textOnDark: "#e8e8f0",
   textOnDarkSecondary: "#a0a0c0",

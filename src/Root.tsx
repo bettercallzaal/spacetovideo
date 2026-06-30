@@ -51,8 +51,8 @@ export const RemotionRoot: React.FC = () => {
       calculateMetadata={calculateMetadata}
       defaultProps={{
         audioSrc: staticFile("audio.ogg"),
-        title: "Your Space Title",
-        subtitle: "Recap",
+        title: "AMA with The Farcaster Intern",
+        subtitle: "ZABAL GAMEZ",
         // calculateMetadata fills these in before render — empties are placeholders.
         transcript: {
           metadata: { duration: 60, channels: 1 },
