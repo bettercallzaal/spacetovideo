@@ -128,6 +128,13 @@
     <div id="pub-out" style="margin-top:0.8rem;"></div>
     <p class="hint" style="margin-top:0.6rem;">Site embed: run <code>node scripts/ingest-recording.mjs &lt;manifest&gt; --write</code> in the zabalgamez repo to add this to /recordings.</p>
   </div>
+
+  <div class="step" id="step-library">
+    <h2><span class="n">7</span> Library</h2>
+    <p class="hint">Every rendered file in out/ - reveal or grab any of them.</p>
+    <button class="go" id="lib-refresh">Refresh</button>
+    <div id="lib-out" style="margin-top:0.6rem;"></div>
+  </div>
 </div>
 
 <script>
@@ -242,6 +249,12 @@ window.reveal = (f) => api("/api/reveal?f="+encodeURIComponent(f), { method:"POS
 
 loadConfig(); loadSpeakers(); loadContent(); loadPublish();
 $("#pub-refresh").addEventListener("click", loadPublish);
+$("#lib-refresh").addEventListener("click", loadLibrary);
+loadLibrary();
+async function loadLibrary(){
+  const rows = await api("/api/library"); const esc = t => (t||"").replace(/</g,"&lt;");
+  $("#lib-out").innerHTML = rows.length ? rows.map(r => '<div style="font-size:0.8rem;padding:0.15rem 0;display:flex;justify-content:space-between;border-bottom:1px solid var(--border)"><a onclick="reveal(\''+r.file+'\')" style="color:var(--cyan);cursor:pointer">'+esc(r.file)+'</a><span style="color:var(--dim)">'+r.dur+'s · '+r.sizeMB+'MB</span></div>').join("") : '<span style="color:var(--dim);font-size:0.8rem">no renders yet</span>';
+}
 $("#pub-reveal").addEventListener("click", () => api("/api/publish/reveal", { method:"POST" }));
 async function loadPublish(){
   const b = await api("/api/publish"); const el = $("#pub-out"); const esc = t => (t||"").replace(/</g,"&lt;");

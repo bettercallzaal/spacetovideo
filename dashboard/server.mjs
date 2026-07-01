@@ -170,6 +170,19 @@ function clipsProgress() {
   return { running: isRunning, allDone, clips };
 }
 
+// ---- recordings library (every mp4 in out/) ----
+function library() {
+  const out = [];
+  try {
+    for (const f of fs.readdirSync(OUT)) {
+      if (!f.endsWith(".mp4")) continue;
+      const info = fileInfo(path.join(OUT, f));
+      out.push({ file: f, sizeMB: info.sizeMB || 0, dur: info.dur || 0 });
+    }
+  } catch {}
+  return out.sort((a, b) => b.sizeMB - a.sizeMB);
+}
+
 // ---- publish bundle (everything in one place) ----
 function publishBundle() {
   const c = getContent() || {};
@@ -336,6 +349,7 @@ const srv = http.createServer((req, res) => {
   if (u.pathname === "/api/clips/vertical/progress") return send(verticalProgress());
   if (u.pathname === "/api/thumbnail" && req.method === "POST") return send(startThumbnails());
   if (u.pathname === "/api/thumbnail/progress") return send(thumbProgress());
+  if (u.pathname === "/api/library") return send(library());
   if (u.pathname === "/api/publish") return send(publishBundle());
   if (u.pathname === "/api/publish/reveal" && req.method === "POST") return send(revealAll());
   // serve out/ images (thumbnail previews)
