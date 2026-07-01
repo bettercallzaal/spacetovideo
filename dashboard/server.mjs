@@ -134,6 +134,42 @@ function getContent() {
   catch { return null; }
 }
 
+// ---- clip cutter (render each content.json clip as a short) ----
+function startClips() {
+  const c = getContent();
+  if (!c || !c.clips?.length) return { ok: false, reason: "run the content pass first" };
+  if (running("clip_render")) return { ok: false, reason: "already cutting clips" };
+  const cmds = c.clips.map((cl, i) => {
+    const a = Math.round(cl.start * 30), b = Math.round(cl.end * 30);
+    return `echo "CLIP ${i} START ${a}-${b}" && npx remotion render SpaceRecap out/clip-${i}.mp4 --frames=${a}-${b} --concurrency=2 --timeout=300000 && echo "CLIP ${i} DONE"`;
+  }).join(" ; ");
+  const sh = `cd ${JSON.stringify(ROOT)} && echo clip_render_marker && ${cmds} ; echo CLIPS_ALL_DONE`;
+  const log = fs.openSync(path.join(ROOT, "clips.log"), "w");
+  const p = spawn("bash", ["-lc", sh], { cwd: ROOT, stdio: ["ignore", log, log], detached: true });
+  p.unref();
+  return { ok: true, count: c.clips.length };
+}
+function clipsProgress() {
+  const c = getContent(); const n = c?.clips?.length || 0;
+  const logPath = path.join(ROOT, "clips.log");
+  const isRunning = running("clip_render_marker");
+  // grep the WHOLE log for the cheap markers (remotion output is too verbose to tail reliably)
+  const markers = spawnSync("grep", ["-oE", "CLIP [0-9]+ (START|DONE)|CLIPS_ALL_DONE", logPath], { encoding: "utf8" }).stdout || "";
+  const started = new Set([...markers.matchAll(/CLIP (\d+) START/g)].map((m) => m[1]));
+  const doneMark = new Set([...markers.matchAll(/CLIP (\d+) DONE/g)].map((m) => m[1]));
+  const allDone = /CLIPS_ALL_DONE/.test(markers);
+  const frame = (tail(logPath, 2000).match(/Rendered (\d+)\/(\d+)|Encoded (\d+)\/(\d+)/g) || []).pop() || "";
+  const clips = [];
+  for (let i = 0; i < n; i++) {
+    const info = fileInfo(path.join(OUT, `clip-${i}.mp4`));
+    let status = "pending";
+    if (info.exists && info.dur > 1) status = "done";
+    else if (started.has(String(i)) && !doneMark.has(String(i))) status = isRunning ? "rendering" : "failed";
+    clips.push({ i, title: c.clips[i]?.title || `clip ${i}`, status, sizeMB: info.exists ? info.sizeMB : 0, dur: info.exists ? info.dur : 0, frame: status === "rendering" ? frame : "" });
+  }
+  return { running: isRunning, allDone, clips };
+}
+
 // ---- transcribe (Step 0: audio -> transcript -> suggestions -> samples) ----
 function startTranscribe() {
   if (!fs.existsSync(path.join(ROOT, "public", "audio.ogg"))) return { ok: false, reason: "drop your audio at public/audio.ogg first" };
@@ -232,6 +268,8 @@ const srv = http.createServer((req, res) => {
   if (u.pathname === "/api/neynar/search") { neynarSearch(u.searchParams.get("q") || "").then((r) => send(r)); return; }
   if (u.pathname === "/api/content" && req.method === "POST") return send(runContentPass());
   if (u.pathname === "/api/content" && req.method === "GET") return send(getContent() || {});
+  if (u.pathname === "/api/clips" && req.method === "POST") return send(startClips());
+  if (u.pathname === "/api/clips/progress") return send(clipsProgress());
   if (u.pathname === "/api/transcribe/progress") return send(transcribeProgress());
   if (req.method === "POST" && u.pathname === "/api/transcribe") return send(startTranscribe());
   if (u.pathname === "/api/speakers" && req.method === "GET") return send(getSpeakers());

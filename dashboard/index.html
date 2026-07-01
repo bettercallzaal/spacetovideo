@@ -90,6 +90,11 @@
     <button class="go" id="content-btn">Generate content</button>
     <span class="status" id="content-status" style="margin-left:0.8rem;"></span>
     <div id="content-out" style="margin-top:0.9rem;"></div>
+    <div id="clip-cut" style="margin-top:0.9rem; display:none;">
+      <button class="go2" id="clip-btn">Cut clips</button>
+      <span class="status" id="clip-status" style="margin-left:0.8rem;"></span>
+      <div id="clip-list" style="margin-top:0.5rem;"></div>
+    </div>
   </div>
 
   <div class="step locked" id="step-render">
@@ -241,12 +246,31 @@ async function loadContent(){
   h += '<div class="cx-h" style="color:var(--dim)">by '+esc(c.generatedBy||"")+(c.hasLLM?' - LLM available':'')+'</div>';
   h += '</div>';
   el.innerHTML = h;
+  $("#clip-cut").style.display = c.clips.length ? "block" : "none";
 }
 $("#content-out").addEventListener("click", (e) => {
   if (!e.target.classList.contains("cx-copy")) return;
   const pre = e.target.parentElement.querySelector("pre");
   if (pre) { navigator.clipboard.writeText(pre.textContent); const o=e.target.textContent; e.target.textContent="copied"; setTimeout(()=>e.target.textContent=o,1200); }
 });
+$("#clip-btn").addEventListener("click", async () => {
+  $("#clip-btn").disabled = true; $("#clip-status").textContent = "cutting clips (one at a time)...";
+  const r = await api("/api/clips", { method:"POST" });
+  if (!r.ok) { $("#clip-status").textContent = r.reason || "failed"; $("#clip-btn").disabled=false; return; }
+  pollClips();
+});
+async function pollClips(){
+  const p = await api("/api/clips/progress");
+  $("#clip-list").innerHTML = p.clips.map(cl => {
+    const badge = cl.status==="done" ? '<span style="color:var(--cyan)">done '+cl.dur+'s '+cl.sizeMB+'MB</span> <a onclick="reveal(\'clip-'+cl.i+'.mp4\')" style="color:var(--cyan);cursor:pointer">reveal</a>'
+      : cl.status==="rendering" ? '<span style="color:var(--gold)">rendering...</span>'
+      : cl.status==="failed" ? '<span style="color:#c0392b">failed</span>' : '<span style="color:var(--dim)">pending</span>';
+    return '<div class="cx-clip"><span class="t">clip '+cl.i+'</span> '+badge+'<div class="ti" style="font-size:0.82rem">'+(cl.title||"").replace(/</g,"&lt;")+'</div></div>';
+  }).join("");
+  if (p.running) { $("#clip-status").textContent="cutting..."; setTimeout(pollClips, 3000); return; }
+  $("#clip-status").textContent = p.allDone ? "all clips cut" : "";
+  $("#clip-btn").disabled = false;
+}
 function fmtS(s){ s=Math.max(0,s|0); const m=(s/60|0), ss=s%60; return m+":"+String(ss).padStart(2,"0"); }
 $("#tr-btn").addEventListener("click", async () => {
   $("#tr-btn").disabled = true;
@@ -263,6 +287,7 @@ async function pollTranscribe(){
   $("#tr-btn").disabled = false;
 }
 api("/api/transcribe/progress").then(p => { if (p.running) { $("#tr-btn").disabled = true; pollTranscribe(); } });
+api("/api/clips/progress").then(p => { if (p.running) { $("#clip-btn").disabled=true; pollClips(); } });
 // resume any in-flight work on load
 api("/api/render/progress").then(p => { if (p.running) { $("#step-render").classList.remove("locked"); $("#render-btn").disabled=true; pollRender(); } if(p.phase==="done"){$("#step-render").classList.remove("locked");$("#step-splice").classList.remove("locked");} });
 api("/api/splice/progress").then(p => { if (p.running) { $("#step-splice").classList.remove("locked"); $("#splice-btn").disabled=true; pollSplice(); } });
