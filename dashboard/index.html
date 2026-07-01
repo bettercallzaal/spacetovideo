@@ -120,6 +120,14 @@
     <div class="status" id="splice-status">idle</div>
     <div class="filebox" id="splice-file"></div>
   </div>
+  <div class="step" id="step-publish">
+    <h2><span class="n">6</span> Publish</h2>
+    <p class="hint">Everything for this recording in one place - copy the YouTube pack + posts, reveal every asset. Uploading + posting stay yours.</p>
+    <button class="go" id="pub-refresh">Refresh bundle</button>
+    <button class="go2" id="pub-reveal" style="margin-left:0.5rem;">Reveal all in Finder</button>
+    <div id="pub-out" style="margin-top:0.8rem;"></div>
+    <p class="hint" style="margin-top:0.6rem;">Site embed: run <code>node scripts/ingest-recording.mjs &lt;manifest&gt; --write</code> in the zabalgamez repo to add this to /recordings.</p>
+  </div>
 </div>
 
 <script>
@@ -232,7 +240,19 @@ async function pollSplice(){
 }
 window.reveal = (f) => api("/api/reveal?f="+encodeURIComponent(f), { method:"POST" });
 
-loadConfig(); loadSpeakers(); loadContent();
+loadConfig(); loadSpeakers(); loadContent(); loadPublish();
+$("#pub-refresh").addEventListener("click", loadPublish);
+$("#pub-reveal").addEventListener("click", () => api("/api/publish/reveal", { method:"POST" }));
+async function loadPublish(){
+  const b = await api("/api/publish"); const el = $("#pub-out"); const esc = t => (t||"").replace(/</g,"&lt;");
+  let h = "";
+  if (b.youtube && b.youtube.title) h += '<div class="cx-h">YOUTUBE PACK</div><div class="cx-block"><button class="cx-copy">copy</button><pre>'+esc(b.youtube.title)+"\n\n"+esc(b.youtube.description)+'</pre></div>';
+  if (b.posts && b.posts.length) { h += '<div class="cx-h">DRAFT POSTS</div>'; h += b.posts.map(p=>'<div class="cx-block"><button class="cx-copy">copy</button><pre>'+esc(p.text)+'</pre></div>').join(""); }
+  h += '<div class="cx-h">ASSETS ('+(b.assets?b.assets.length:0)+')</div>';
+  h += (b.assets||[]).map(a=>'<div style="font-size:0.8rem;padding:0.12rem 0"><a onclick="reveal(\''+a.file+'\')" style="color:var(--cyan);cursor:pointer">'+esc(a.file)+'</a> <span style="color:var(--dim)">'+esc(a.label)+(a.sizeMB?' - '+a.sizeMB+'MB':'')+'</span></div>').join("");
+  el.innerHTML = h;
+  el.querySelectorAll(".cx-copy").forEach(btn=>btn.addEventListener("click",()=>{const pre=btn.parentElement.querySelector("pre");navigator.clipboard.writeText(pre.textContent);const o=btn.textContent;btn.textContent="copied";setTimeout(()=>btn.textContent=o,1200);}));
+}
 $("#content-btn").addEventListener("click", async () => {
   $("#content-btn").disabled = true; $("#content-status").textContent = "reading the transcript...";
   const r = await api("/api/content", { method:"POST" });

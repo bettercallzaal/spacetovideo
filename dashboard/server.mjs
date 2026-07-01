@@ -170,6 +170,26 @@ function clipsProgress() {
   return { running: isRunning, allDone, clips };
 }
 
+// ---- publish bundle (everything in one place) ----
+function publishBundle() {
+  const c = getContent() || {};
+  const assets = [];
+  const add = (f, label) => { if (fs.existsSync(path.join(OUT, f))) { const info = fileInfo(path.join(OUT, f)); assets.push({ file: f, label, sizeMB: info.sizeMB || 0, dur: info.dur || 0 }); } };
+  add("space-recap-bookended.mp4", "Recap (with intro/outro)");
+  add("space-recap.mp4", "Recap (raw)");
+  const n = c.clips?.length || 0;
+  for (let i = 0; i < n; i++) { add(`clip-${i}.mp4`, `Clip ${i}: ${(c.clips[i]?.title || "").slice(0, 40)}`); add(`clip-${i}-vertical.mp4`, `Clip ${i} vertical (9:16)`); }
+  for (const t of thumbList()) add(t, "Thumbnail");
+  return { youtube: c.youtube || null, posts: c.posts || [], assets };
+}
+function revealAll() {
+  const b = publishBundle();
+  for (const a of b.assets) { const f = path.join(OUT, a.file); if (fs.existsSync(f)) spawnSync("open", ["-R", f]); break; }
+  // open the out/ folder itself so all assets are visible
+  spawnSync("open", [OUT]);
+  return { ok: true };
+}
+
 // ---- thumbnails (ffmpeg frame + PIL title overlay) ----
 function startThumbnails() {
   if (running("make-thumbnails")) return { ok: false, reason: "already making thumbnails" };
@@ -316,6 +336,8 @@ const srv = http.createServer((req, res) => {
   if (u.pathname === "/api/clips/vertical/progress") return send(verticalProgress());
   if (u.pathname === "/api/thumbnail" && req.method === "POST") return send(startThumbnails());
   if (u.pathname === "/api/thumbnail/progress") return send(thumbProgress());
+  if (u.pathname === "/api/publish") return send(publishBundle());
+  if (u.pathname === "/api/publish/reveal" && req.method === "POST") return send(revealAll());
   // serve out/ images (thumbnail previews)
   if (req.method === "GET" && u.pathname.startsWith("/out/")) {
     const f = path.join(OUT, path.basename(u.pathname));
