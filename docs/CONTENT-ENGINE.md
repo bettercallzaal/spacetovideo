@@ -1,5 +1,7 @@
 # Content Engine - spec
 
+> Status: COMPLETE (all 8 steps shipped). Proven end to end on the AMA recording.
+
 > Turn one recording (sweet spot ~15 min) into a full content suite from the dashboard:
 > a recap video + highlight clips + YouTube chapters + a thumbnail + ready-to-send posts,
 > all reviewable before anything goes public. This is the north star for the dashboard.
@@ -36,11 +38,11 @@
 - No auto-posting to Farcaster from the engine - it produces drafts; posting stays a human action (brand safety).
 
 ## Build order (one per loop tick)
-1. Content pass endpoint + content.json (the brain) - unlocks clips + chapters + posts + youtube at once.
-2. YouTube pack panel (title/desc/chapters copy blocks).
-3. Clip cutter (render clips from content.json) + reveal.
-4. 9:16 vertical crop option per clip.
-5. Thumbnail generator.
-6. On-screen chapter-title + pull-quote cards in the recap composition (doc 921) - re-render aware.
-7. Publish panel (bundle YouTube pack + posts + assets; embed hook).
-8. Recordings library (list out/*.mp4, re-open a past run).
+1. [DONE] Content pass endpoint + content.json (the brain) - unlocks clips + chapters + posts + youtube at once.
+2. [DONE] YouTube pack panel (title/desc/chapters copy blocks).
+3. [DONE] Clip cutter (render clips from content.json) + reveal.
+4. [DONE] 9:16 vertical crop option per clip.
+5. [DONE] Thumbnail generator.
+6. [DONE] On-screen chapter-title + pull-quote cards in the recap composition (doc 921) - re-render aware.
+7. [DONE] Publish panel (bundle YouTube pack + posts + assets; embed hook).
+8. [DONE] Recordings library (list out/*.mp4, re-open a past run).

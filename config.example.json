@@ -1,5 +1,6 @@
 {
   "title": "Space Recap",
   "intro": "/absolute/path/to/your/intro.mov",
-  "outro": "/absolute/path/to/your/outro.mov"
+  "outro": "/absolute/path/to/your/outro.mov",
+  "showCards": false
 }

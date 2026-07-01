@@ -63,7 +63,8 @@ function startRender() {
   if (running("remotion render")) return { ok: false, reason: "already running" };
   try { fs.unlinkSync(path.join(OUT, "space-recap.mp4")); } catch {}
   const log = fs.openSync(path.join(ROOT, "render-full.log"), "w");
-  renderProc = spawn("npx", ["remotion", "render", "SpaceRecap", "out/space-recap.mp4", "--concurrency=2", "--timeout=300000"],
+  const cardArg = loadConfig().showCards ? ['--props={"showCards":true}'] : [];
+  renderProc = spawn("npx", ["remotion", "render", "SpaceRecap", "out/space-recap.mp4", "--concurrency=2", "--timeout=300000", ...cardArg],
     { cwd: ROOT, stdio: ["ignore", log, log], detached: true });
   renderProc.unref();
   return { ok: true };
@@ -139,9 +140,10 @@ function startClips() {
   const c = getContent();
   if (!c || !c.clips?.length) return { ok: false, reason: "run the content pass first" };
   if (running("clip_render")) return { ok: false, reason: "already cutting clips" };
+  const cardFlag = loadConfig().showCards ? ` --props='{"showCards":true}'` : "";
   const cmds = c.clips.map((cl, i) => {
     const a = Math.round(cl.start * 30), b = Math.round(cl.end * 30);
-    return `echo "CLIP ${i} START ${a}-${b}" && npx remotion render SpaceRecap out/clip-${i}.mp4 --frames=${a}-${b} --concurrency=2 --timeout=300000 && echo "CLIP ${i} DONE"`;
+    return `echo "CLIP ${i} START ${a}-${b}" && npx remotion render SpaceRecap out/clip-${i}.mp4 --frames=${a}-${b} --concurrency=2 --timeout=300000${cardFlag} && echo "CLIP ${i} DONE"`;
   }).join(" ; ");
   const sh = `cd ${JSON.stringify(ROOT)} && echo clip_render_marker && ${cmds} ; echo CLIPS_ALL_DONE`;
   const log = fs.openSync(path.join(ROOT, "clips.log"), "w");

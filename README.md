@@ -312,3 +312,13 @@ Yes. Manually run `ffmpeg concat` or edit `dashboard/server.mjs` to support it.
 
 **Q: Why no test suite?**
 The pipeline is primarily I/O (API calls, file writes). Tests would be async integration tests, which are slower than just running the real pipeline. Validation (`node scripts/validate.mjs`) checks JSON syntax + Deepgram response integrity.
+
+## Content Engine (dashboard)
+
+Turn one recording into a full content suite from a local dashboard - no manual editing.
+
+```bash
+node dashboard/server.mjs   # -> http://localhost:4747
+```
+
+Flow: drop audio at `public/audio.ogg` -> **Transcribe** -> **Confirm speakers** (listen + type each Farcaster handle) -> **Content pass** (one read of the transcript produces highlight clips, YouTube chapters, a YouTube pack, and draft ZM posts) -> **Cut clips** -> **Make vertical** (9:16 for shorts) -> **Make thumbnails** -> **Render** the recap -> **Add intro + outro** -> **Publish** (one bundle: YouTube pack + posts + every asset path). A recording in, a recap + clips + verticals + thumbnails + chapters + posts out. See `docs/CONTENT-ENGINE.md`.
