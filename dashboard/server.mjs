@@ -170,6 +170,20 @@ function clipsProgress() {
   return { running: isRunning, allDone, clips };
 }
 
+// ---- thumbnails (ffmpeg frame + PIL title overlay) ----
+function startThumbnails() {
+  if (running("make-thumbnails")) return { ok: false, reason: "already making thumbnails" };
+  const log = fs.openSync(path.join(ROOT, "thumb.log"), "w");
+  const p = spawn("bash", ["-lc", `cd ${JSON.stringify(ROOT)} && node scripts/make-thumbnails.mjs && echo THUMBS_DONE`], { cwd: ROOT, stdio: ["ignore", log, log], detached: true });
+  p.unref();
+  return { ok: true };
+}
+function thumbList() { try { return fs.readdirSync(OUT).filter((f) => /^thumb-.*\.png$/.test(f)).sort(); } catch { return []; } }
+function thumbProgress() {
+  const log = tail(path.join(ROOT, "thumb.log"), 3000);
+  return { running: running("make-thumbnails"), done: /THUMBS_DONE/.test(log), thumbs: thumbList() };
+}
+
 // ---- 9:16 vertical crop per clip (for shorts) ----
 function startVertical() {
   const c = getContent(); const n = c?.clips?.length || 0;
@@ -300,6 +314,14 @@ const srv = http.createServer((req, res) => {
   if (u.pathname === "/api/clips/progress") return send(clipsProgress());
   if (u.pathname === "/api/clips/vertical" && req.method === "POST") return send(startVertical());
   if (u.pathname === "/api/clips/vertical/progress") return send(verticalProgress());
+  if (u.pathname === "/api/thumbnail" && req.method === "POST") return send(startThumbnails());
+  if (u.pathname === "/api/thumbnail/progress") return send(thumbProgress());
+  // serve out/ images (thumbnail previews)
+  if (req.method === "GET" && u.pathname.startsWith("/out/")) {
+    const f = path.join(OUT, path.basename(u.pathname));
+    if (fs.existsSync(f)) { res.writeHead(200, { "content-type": f.endsWith(".png") ? "image/png" : "application/octet-stream" }); fs.createReadStream(f).pipe(res); return; }
+    res.writeHead(404); res.end("no file"); return;
+  }
   if (u.pathname === "/api/transcribe/progress") return send(transcribeProgress());
   if (req.method === "POST" && u.pathname === "/api/transcribe") return send(startTranscribe());
   if (u.pathname === "/api/speakers" && req.method === "GET") return send(getSpeakers());

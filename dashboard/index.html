@@ -97,6 +97,9 @@
       <button class="go2" id="vert-btn" style="margin-top:0.5rem;">Make vertical (9:16)</button>
       <span class="status" id="vert-status" style="margin-left:0.8rem;"></span>
       <div id="vert-list" style="margin-top:0.4rem;"></div>
+      <button class="go" id="thumb-btn" style="margin-top:0.5rem;">Make thumbnails</button>
+      <span class="status" id="thumb-status" style="margin-left:0.8rem;"></span>
+      <div id="thumb-grid" style="margin-top:0.5rem; display:flex; flex-wrap:wrap; gap:0.5rem;"></div>
     </div>
   </div>
 
@@ -291,6 +294,19 @@ async function pollVert(){
   $("#vert-status").textContent = p.clips.every(c=>c.status==="done") && p.clips.length ? "verticals ready" : "";
   $("#vert-btn").disabled=false;
 }
+$("#thumb-btn").addEventListener("click", async () => {
+  $("#thumb-btn").disabled=true; $("#thumb-status").textContent="grabbing frames + overlaying titles...";
+  const r = await api("/api/thumbnail", { method:"POST" });
+  if (!r.ok) { $("#thumb-status").textContent=r.reason||"failed"; $("#thumb-btn").disabled=false; return; }
+  pollThumbs();
+});
+async function pollThumbs(){
+  const p = await api("/api/thumbnail/progress");
+  $("#thumb-grid").innerHTML = (p.thumbs||[]).map(t => '<a onclick="reveal(\''+t+'\')" style="cursor:pointer"><img src="/out/'+t+'?t='+Date.now()+'" style="width:180px;border:1px solid var(--border);border-radius:6px" title="'+t+'"></a>').join("");
+  if (p.running) { setTimeout(pollThumbs, 2000); return; }
+  $("#thumb-status").textContent = p.thumbs.length ? p.thumbs.length+" thumbnails" : "";
+  $("#thumb-btn").disabled=false;
+}
 function fmtS(s){ s=Math.max(0,s|0); const m=(s/60|0), ss=s%60; return m+":"+String(ss).padStart(2,"0"); }
 $("#tr-btn").addEventListener("click", async () => {
   $("#tr-btn").disabled = true;
@@ -309,6 +325,7 @@ async function pollTranscribe(){
 api("/api/transcribe/progress").then(p => { if (p.running) { $("#tr-btn").disabled = true; pollTranscribe(); } });
 api("/api/clips/progress").then(p => { if (p.running) { $("#clip-btn").disabled=true; pollClips(); } });
 api("/api/clips/vertical/progress").then(p => { if (p.running) { $("#vert-btn").disabled=true; pollVert(); } });
+api("/api/thumbnail/progress").then(p => { $("#thumb-grid").innerHTML=(p.thumbs||[]).map(t=>'<a onclick="reveal(\''+t+'\')" style="cursor:pointer"><img src="/out/'+t+'" style="width:180px;border:1px solid var(--border);border-radius:6px"></a>').join(""); if(p.running){$("#thumb-btn").disabled=true;pollThumbs();} });
 // resume any in-flight work on load
 api("/api/render/progress").then(p => { if (p.running) { $("#step-render").classList.remove("locked"); $("#render-btn").disabled=true; pollRender(); } if(p.phase==="done"){$("#step-render").classList.remove("locked");$("#step-splice").classList.remove("locked");} });
 api("/api/splice/progress").then(p => { if (p.running) { $("#step-splice").classList.remove("locked"); $("#splice-btn").disabled=true; pollSplice(); } });
