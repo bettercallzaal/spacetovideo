@@ -94,6 +94,9 @@
       <button class="go2" id="clip-btn">Cut clips</button>
       <span class="status" id="clip-status" style="margin-left:0.8rem;"></span>
       <div id="clip-list" style="margin-top:0.5rem;"></div>
+      <button class="go2" id="vert-btn" style="margin-top:0.5rem;">Make vertical (9:16)</button>
+      <span class="status" id="vert-status" style="margin-left:0.8rem;"></span>
+      <div id="vert-list" style="margin-top:0.4rem;"></div>
     </div>
   </div>
 
@@ -271,6 +274,23 @@ async function pollClips(){
   $("#clip-status").textContent = p.allDone ? "all clips cut" : "";
   $("#clip-btn").disabled = false;
 }
+$("#vert-btn").addEventListener("click", async () => {
+  $("#vert-btn").disabled=true; $("#vert-status").textContent="cropping to 9:16...";
+  const r = await api("/api/clips/vertical", { method:"POST" });
+  if (!r.ok) { $("#vert-status").textContent=r.reason||"failed"; $("#vert-btn").disabled=false; return; }
+  pollVert();
+});
+async function pollVert(){
+  const p = await api("/api/clips/vertical/progress");
+  $("#vert-list").innerHTML = p.clips.map(cl => {
+    const b = cl.status==="done" ? '<span style="color:var(--cyan)">vertical '+cl.sizeMB+'MB</span> <a onclick="reveal(\'clip-'+cl.i+'-vertical.mp4\')" style="color:var(--cyan);cursor:pointer">reveal</a>'
+      : cl.status==="working" ? '<span style="color:var(--gold)">cropping...</span>' : '<span style="color:var(--dim)">pending</span>';
+    return '<div style="font-size:0.8rem;padding:0.15rem 0">clip '+cl.i+' '+b+'</div>';
+  }).join("");
+  if (p.running) { setTimeout(pollVert, 2500); return; }
+  $("#vert-status").textContent = p.clips.every(c=>c.status==="done") && p.clips.length ? "verticals ready" : "";
+  $("#vert-btn").disabled=false;
+}
 function fmtS(s){ s=Math.max(0,s|0); const m=(s/60|0), ss=s%60; return m+":"+String(ss).padStart(2,"0"); }
 $("#tr-btn").addEventListener("click", async () => {
   $("#tr-btn").disabled = true;
@@ -288,6 +308,7 @@ async function pollTranscribe(){
 }
 api("/api/transcribe/progress").then(p => { if (p.running) { $("#tr-btn").disabled = true; pollTranscribe(); } });
 api("/api/clips/progress").then(p => { if (p.running) { $("#clip-btn").disabled=true; pollClips(); } });
+api("/api/clips/vertical/progress").then(p => { if (p.running) { $("#vert-btn").disabled=true; pollVert(); } });
 // resume any in-flight work on load
 api("/api/render/progress").then(p => { if (p.running) { $("#step-render").classList.remove("locked"); $("#render-btn").disabled=true; pollRender(); } if(p.phase==="done"){$("#step-render").classList.remove("locked");$("#step-splice").classList.remove("locked");} });
 api("/api/splice/progress").then(p => { if (p.running) { $("#step-splice").classList.remove("locked"); $("#splice-btn").disabled=true; pollSplice(); } });

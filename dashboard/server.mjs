@@ -170,6 +170,34 @@ function clipsProgress() {
   return { running: isRunning, allDone, clips };
 }
 
+// ---- 9:16 vertical crop per clip (for shorts) ----
+function startVertical() {
+  const c = getContent(); const n = c?.clips?.length || 0;
+  const have = [];
+  for (let i = 0; i < n; i++) if (fs.existsSync(path.join(OUT, `clip-${i}.mp4`))) have.push(i);
+  if (!have.length) return { ok: false, reason: "cut the clips first" };
+  if (running("vertical_marker")) return { ok: false, reason: "already making verticals" };
+  const cmds = have.map((i) =>
+    `echo "VERT ${i} START" && ffmpeg -y -i out/clip-${i}.mp4 -vf "crop=ih*9/16:ih,scale=1080:1920,setsar=1" -c:v libx264 -preset medium -crf 20 -c:a copy out/clip-${i}-vertical.mp4 && echo "VERT ${i} DONE"`
+  ).join(" ; ");
+  const sh = `cd ${JSON.stringify(ROOT)} && echo vertical_marker && ${cmds} ; echo VERT_ALL_DONE`;
+  const log = fs.openSync(path.join(ROOT, "vertical.log"), "w");
+  const p = spawn("bash", ["-lc", sh], { cwd: ROOT, stdio: ["ignore", log, log], detached: true });
+  p.unref();
+  return { ok: true, count: have.length };
+}
+function verticalProgress() {
+  const c = getContent(); const n = c?.clips?.length || 0;
+  const isRunning = running("vertical_marker");
+  const clips = [];
+  for (let i = 0; i < n; i++) {
+    if (!fs.existsSync(path.join(OUT, `clip-${i}.mp4`))) continue;
+    const info = fileInfo(path.join(OUT, `clip-${i}-vertical.mp4`));
+    clips.push({ i, status: info.exists && info.dur > 1 ? "done" : (isRunning ? "working" : "pending"), sizeMB: info.exists ? info.sizeMB : 0 });
+  }
+  return { running: isRunning, clips };
+}
+
 // ---- transcribe (Step 0: audio -> transcript -> suggestions -> samples) ----
 function startTranscribe() {
   if (!fs.existsSync(path.join(ROOT, "public", "audio.ogg"))) return { ok: false, reason: "drop your audio at public/audio.ogg first" };
@@ -270,6 +298,8 @@ const srv = http.createServer((req, res) => {
   if (u.pathname === "/api/content" && req.method === "GET") return send(getContent() || {});
   if (u.pathname === "/api/clips" && req.method === "POST") return send(startClips());
   if (u.pathname === "/api/clips/progress") return send(clipsProgress());
+  if (u.pathname === "/api/clips/vertical" && req.method === "POST") return send(startVertical());
+  if (u.pathname === "/api/clips/vertical/progress") return send(verticalProgress());
   if (u.pathname === "/api/transcribe/progress") return send(transcribeProgress());
   if (req.method === "POST" && u.pathname === "/api/transcribe") return send(startTranscribe());
   if (u.pathname === "/api/speakers" && req.method === "GET") return send(getSpeakers());
