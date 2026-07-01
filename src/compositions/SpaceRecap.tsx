@@ -10,6 +10,8 @@ import { CaptionTrack } from "../components/CaptionTrack";
 import { TitleCard } from "../components/TitleCard";
 import { TimeBadge } from "../components/TimeBadge";
 import { ProgressBar } from "../components/ProgressBar";
+import { ChapterCard } from "../components/ChapterCard";
+import { QuoteCard } from "../components/QuoteCard";
 import { useActiveGuest } from "../hooks/useActiveGuest";
 
 export type SpaceRecapProps = {
@@ -18,6 +20,11 @@ export type SpaceRecapProps = {
   subtitle: string;
   transcript: Transcript;
   profiles: Profiles;
+  // Optional on-screen cards (off by default). When showCards is true, chapters/quotes come from
+  // data/content.json via calculateMetadata. Off = existing output is byte-for-byte unchanged.
+  showCards?: boolean;
+  chapters?: { t: number; label: string }[];
+  quotes?: { start: number; end: number; text: string }[];
 };
 
 export const SpaceRecap: React.FC<SpaceRecapProps> = ({
@@ -26,6 +33,9 @@ export const SpaceRecap: React.FC<SpaceRecapProps> = ({
   subtitle,
   transcript,
   profiles,
+  showCards,
+  chapters,
+  quotes,
 }) => {
   const { width, height } = useVideoConfig();
   const utterances = transcript.results.utterances ?? [];
@@ -69,6 +79,10 @@ export const SpaceRecap: React.FC<SpaceRecapProps> = ({
 
       {/* Bottom progress bar */}
       <ProgressBar />
+
+      {/* Optional on-screen cards (off by default; existing renders unaffected) */}
+      {showCards ? <ChapterCard chapters={chapters} /> : null}
+      {showCards ? <QuoteCard quotes={quotes} /> : null}
 
       {/* Footer caveat */}
       <div

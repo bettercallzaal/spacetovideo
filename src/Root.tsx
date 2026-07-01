@@ -33,9 +33,27 @@ const calculateMetadata: CalculateMetadataFunction<SpaceRecapProps> = async ({ p
     ),
   ]);
 
+  // Optional on-screen cards: only when showCards is set, best-effort load content.json.
+  let chapters = props.chapters;
+  let quotes = props.quotes;
+  if (props.showCards && (!chapters || !quotes)) {
+    try {
+      const content = await fetchJson<{ chapters?: { t: string; label: string }[]; clips?: { start: number; end: number; quote: string }[] }>(
+        staticFile("data/content.json"),
+        "Run the content pass (dashboard) first.",
+      );
+      const toSec = (t: string) => t.split(":").reverse().reduce((acc, v, i) => acc + Number(v) * Math.pow(60, i), 0);
+      chapters = (content.chapters || []).map((c) => ({ t: toSec(c.t), label: c.label }));
+      quotes = (content.clips || []).map((c) => ({ start: c.start, end: c.end, text: c.quote }));
+    } catch {
+      chapters = chapters || [];
+      quotes = quotes || [];
+    }
+  }
+
   return {
     durationInFrames: Math.ceil(duration * FPS),
-    props: { ...props, audioSrc, transcript, profiles },
+    props: { ...props, audioSrc, transcript, profiles, chapters, quotes },
   };
 };
 
@@ -53,6 +71,7 @@ export const RemotionRoot: React.FC = () => {
         audioSrc: staticFile("audio.ogg"),
         title: "AMA with The Farcaster Intern",
         subtitle: "ZABAL GAMEZ",
+        showCards: false, // on-screen chapter/quote cards off by default (set true to enable)
         // calculateMetadata fills these in before render — empties are placeholders.
         transcript: {
           metadata: { duration: 60, channels: 1 },
