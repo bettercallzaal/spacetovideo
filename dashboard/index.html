@@ -52,7 +52,10 @@
   .cx-clip .t { color:var(--cyan); font-family:ui-monospace,monospace; font-size:0.72rem; }
   .cx-clip .ti { font-weight:600; font-size:0.9rem; margin:0.15rem 0; }
   .cx-clip .q { color:var(--dim); font-size:0.8rem; }
-  .cx pre { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:0.6rem; font-size:0.78rem; white-space:pre-wrap; margin:0.3rem 0; }
+  .cx pre { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:0.6rem; font-size:0.78rem; white-space:pre-wrap; margin:0; }
+  .cx-block { position:relative; margin:0.3rem 0; }
+  .cx-copy { position:absolute; top:6px; right:6px; padding:0.2rem 0.6rem; font-size:0.68rem; border-radius:999px; background:var(--cyan); color:#04121a; border:0; cursor:pointer; opacity:0.85; }
+  .cx-copy:hover { opacity:1; }
   .pixel { font-family:ui-monospace,monospace; letter-spacing:2px; }
 </style>
 </head>
@@ -232,13 +235,18 @@ async function loadContent(){
   let h = '<div class="cx">';
   h += '<div class="cx-h">CLIPS ('+c.clips.length+')</div>';
   h += c.clips.map(cl => `<div class="cx-clip"><span class="t">${fmtS(cl.start)} - ${fmtS(cl.end)}</span><div class="ti">${esc(cl.title)}</div><div class="q">${esc(cl.quote)}</div></div>`).join("");
-  h += '<div class="cx-h">YOUTUBE PACK</div><pre>'+esc((c.youtube&&c.youtube.title)||"")+"\n\n"+esc((c.youtube&&c.youtube.description)||"")+'</pre>';
+  h += '<div class="cx-h">YOUTUBE PACK</div><div class="cx-block"><button class="cx-copy">copy</button><pre>'+esc((c.youtube&&c.youtube.title)||"")+"\n\n"+esc((c.youtube&&c.youtube.description)||"")+'</pre></div>';
   h += '<div class="cx-h">DRAFT POSTS ('+c.posts.length+')</div>';
-  h += c.posts.map(p => '<pre>'+esc(p.text)+'</pre>').join("");
+  h += c.posts.map(p => '<div class="cx-block"><button class="cx-copy">copy</button><pre>'+esc(p.text)+'</pre></div>').join("");
   h += '<div class="cx-h" style="color:var(--dim)">by '+esc(c.generatedBy||"")+(c.hasLLM?' - LLM available':'')+'</div>';
   h += '</div>';
   el.innerHTML = h;
 }
+$("#content-out").addEventListener("click", (e) => {
+  if (!e.target.classList.contains("cx-copy")) return;
+  const pre = e.target.parentElement.querySelector("pre");
+  if (pre) { navigator.clipboard.writeText(pre.textContent); const o=e.target.textContent; e.target.textContent="copied"; setTimeout(()=>e.target.textContent=o,1200); }
+});
 function fmtS(s){ s=Math.max(0,s|0); const m=(s/60|0), ss=s%60; return m+":"+String(ss).padStart(2,"0"); }
 $("#tr-btn").addEventListener("click", async () => {
   $("#tr-btn").disabled = true;
