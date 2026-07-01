@@ -123,6 +123,17 @@ function spliceProgress() {
   return { running: isRunning, phase, pct: isRunning ? pct : (file.valid ? 100 : 0), file };
 }
 
+// ---- content pass (the brain: transcript -> clips + chapters + posts + youtube) ----
+function runContentPass() {
+  const r = spawnSync("node", ["scripts/content-pass.mjs"], { cwd: ROOT, encoding: "utf8" });
+  if (r.status !== 0) return { ok: false, reason: (r.stderr || "content pass failed").slice(0, 300) };
+  return { ok: true };
+}
+function getContent() {
+  try { return JSON.parse(fs.readFileSync(path.join(ROOT, "data", "content.json"), "utf8")); }
+  catch { return null; }
+}
+
 // ---- transcribe (Step 0: audio -> transcript -> suggestions -> samples) ----
 function startTranscribe() {
   if (!fs.existsSync(path.join(ROOT, "public", "audio.ogg"))) return { ok: false, reason: "drop your audio at public/audio.ogg first" };
@@ -219,6 +230,8 @@ const srv = http.createServer((req, res) => {
   }
   if (u.pathname === "/api/config") return send({ title: loadConfig().title, hasIntro: !!loadConfig().intro && fs.existsSync(loadConfig().intro), hasOutro: !!loadConfig().outro && fs.existsSync(loadConfig().outro), hasAudio: fs.existsSync(path.join(ROOT, "public", "audio.ogg")) });
   if (u.pathname === "/api/neynar/search") { neynarSearch(u.searchParams.get("q") || "").then((r) => send(r)); return; }
+  if (u.pathname === "/api/content" && req.method === "POST") return send(runContentPass());
+  if (u.pathname === "/api/content" && req.method === "GET") return send(getContent() || {});
   if (u.pathname === "/api/transcribe/progress") return send(transcribeProgress());
   if (req.method === "POST" && u.pathname === "/api/transcribe") return send(startTranscribe());
   if (u.pathname === "/api/speakers" && req.method === "GET") return send(getSpeakers());

@@ -47,6 +47,12 @@
   .warn { color:#e6a93f; font-size:0.82rem; margin-top:0.4rem; }
   .filebox { margin-top:0.6rem; font-size:0.85rem; }
   .filebox a { color:var(--cyan); cursor:pointer; }
+  .cx-h { font-family:ui-monospace,monospace; font-size:0.72rem; color:var(--gold); letter-spacing:1px; margin:0.9rem 0 0.3rem; }
+  .cx-clip { border:1px solid var(--border); border-radius:8px; padding:0.5rem 0.7rem; margin-bottom:0.4rem; }
+  .cx-clip .t { color:var(--cyan); font-family:ui-monospace,monospace; font-size:0.72rem; }
+  .cx-clip .ti { font-weight:600; font-size:0.9rem; margin:0.15rem 0; }
+  .cx-clip .q { color:var(--dim); font-size:0.8rem; }
+  .cx pre { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:0.6rem; font-size:0.78rem; white-space:pre-wrap; margin:0.3rem 0; }
   .pixel { font-family:ui-monospace,monospace; letter-spacing:2px; }
 </style>
 </head>
@@ -75,8 +81,16 @@
     <div class="warn" id="spk-warn"></div>
   </div>
 
+  <div class="step" id="step-content">
+    <h2><span class="n">3</span> Content pass <span class="ready">DONE</span></h2>
+    <p class="hint">One read of the transcript - highlight clips, YouTube chapters, and draft ZM posts. Review before you cut or publish.</p>
+    <button class="go" id="content-btn">Generate content</button>
+    <span class="status" id="content-status" style="margin-left:0.8rem;"></span>
+    <div id="content-out" style="margin-top:0.9rem;"></div>
+  </div>
+
   <div class="step locked" id="step-render">
-    <h2><span class="n">3</span> Render the hour <span class="ready">READY</span></h2>
+    <h2><span class="n">4</span> Render the hour <span class="ready">READY</span></h2>
     <p class="hint">Renders the full recap video with the confirmed speakers. ~1 hour, stable.</p>
     <button class="go" id="render-btn">Render</button>
     <div class="bar"><div id="render-bar"></div></div>
@@ -85,7 +99,7 @@
   </div>
 
   <div class="step locked" id="step-splice">
-    <h2><span class="n">4</span> Add intro + outro <span class="ready">DONE</span></h2>
+    <h2><span class="n">5</span> Add intro + outro <span class="ready">DONE</span></h2>
     <p class="hint">Bookends the render with your intro and outro templates (set in config.json).</p>
     <button class="go2" id="splice-btn">Add bookends</button>
     <div class="bar"><div id="splice-bar"></div></div>
@@ -204,7 +218,28 @@ async function pollSplice(){
 }
 window.reveal = (f) => api("/api/reveal?f="+encodeURIComponent(f), { method:"POST" });
 
-loadConfig(); loadSpeakers();
+loadConfig(); loadSpeakers(); loadContent();
+$("#content-btn").addEventListener("click", async () => {
+  $("#content-btn").disabled = true; $("#content-status").textContent = "reading the transcript...";
+  const r = await api("/api/content", { method:"POST" });
+  if (!r.ok) { $("#content-status").textContent = r.reason || "failed"; $("#content-btn").disabled=false; return; }
+  await loadContent(); $("#content-status").textContent = "done"; $("#content-btn").disabled=false;
+});
+async function loadContent(){
+  const c = await api("/api/content"); const el = $("#content-out");
+  if (!c || !c.clips) { el.innerHTML = ""; return; }
+  const esc = t => (t||"").replace(/</g,"&lt;");
+  let h = '<div class="cx">';
+  h += '<div class="cx-h">CLIPS ('+c.clips.length+')</div>';
+  h += c.clips.map(cl => `<div class="cx-clip"><span class="t">${fmtS(cl.start)} - ${fmtS(cl.end)}</span><div class="ti">${esc(cl.title)}</div><div class="q">${esc(cl.quote)}</div></div>`).join("");
+  h += '<div class="cx-h">YOUTUBE PACK</div><pre>'+esc((c.youtube&&c.youtube.title)||"")+"\n\n"+esc((c.youtube&&c.youtube.description)||"")+'</pre>';
+  h += '<div class="cx-h">DRAFT POSTS ('+c.posts.length+')</div>';
+  h += c.posts.map(p => '<pre>'+esc(p.text)+'</pre>').join("");
+  h += '<div class="cx-h" style="color:var(--dim)">by '+esc(c.generatedBy||"")+(c.hasLLM?' - LLM available':'')+'</div>';
+  h += '</div>';
+  el.innerHTML = h;
+}
+function fmtS(s){ s=Math.max(0,s|0); const m=(s/60|0), ss=s%60; return m+":"+String(ss).padStart(2,"0"); }
 $("#tr-btn").addEventListener("click", async () => {
   $("#tr-btn").disabled = true;
   const r = await api("/api/transcribe", { method:"POST" });
