@@ -15,7 +15,11 @@ async function main() {
     console.error("Usage: tsx scripts/find-user.ts <query>");
     process.exit(1);
   }
-  const apiKey = process.env.NEYNAR_API_KEY!;
+  const apiKey = process.env.NEYNAR_API_KEY;
+  if (!apiKey) {
+    console.error("NEYNAR_API_KEY not set — add it to .env");
+    process.exit(1);
+  }
   const users = await searchUsers({ query, apiKey, limit: 8 });
   for (const u of users) {
     console.log(`  @${u.username}  fid=${u.fid}  "${u.display_name}"  ${u.pfp_url?.slice(0, 80)}`);
